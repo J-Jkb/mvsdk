@@ -4152,9 +4152,14 @@ int WP_SaberCanBlock(gentity_t *self, vec3_t point, int dflags, int mod, qboolea
 		return 0;
 	}
 
-	if (self->client->ps.weaponstate == WEAPON_RAISING)
-	{
-		return 0;
+	if (tvt_stabilityFixes.integer) {
+		if (self->client->ps.weaponstate == WEAPON_RAISING && !thrownSaber) {
+			return 0;
+		}
+	} else {
+		if (self->client->ps.weaponstate == WEAPON_RAISING) {
+			return 0;
+		}
 	}
 
 	if (self->client->ps.saberInFlight)
@@ -4221,12 +4226,23 @@ int WP_SaberCanBlock(gentity_t *self, vec3_t point, int dflags, int mod, qboolea
 	if (self->client->ps.saberMove != LS_READY &&
 		!self->client->ps.saberBlocking)
 	{
-		return 0;
+		if (tvt_stabilityFixes.integer) {
+			if (!thrownSaber || self->client->ps.saberMove != LS_NONE) {
+				return 0;
+			}
+		} else {
+			return 0;
+		}
 	}
 
-	if (self->client->ps.saberBlockTime >= level.time)
-	{
-		return 0;
+	if (tvt_stabilityFixes.integer) {
+		if (self->client->ps.saberBlockTime > 0 && self->client->ps.saberBlockTime >= level.time) {
+			return 0;
+		}
+	} else {
+		if (self->client->ps.saberBlockTime >= level.time) {
+			return 0;
+		}
 	}
 
 	if (self->client->ps.forceHandExtend != HANDEXTEND_NONE)

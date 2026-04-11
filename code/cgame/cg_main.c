@@ -487,6 +487,7 @@ vmCvar_t	cg_tracerWidth;
 vmCvar_t	cg_tracerLength;
 vmCvar_t	cg_autoswitch;
 vmCvar_t	cg_ignore;
+vmCvar_t	tvt_stabilityFixes;
 vmCvar_t	cg_simpleItems;
 vmCvar_t	cg_fov;
 vmCvar_t	cg_zoomFov;
@@ -603,6 +604,7 @@ typedef struct {
 } cvarTable_t;
 
 static cvarTable_t cvarTable[] = { // bk001129
+	{ &tvt_stabilityFixes, "tvt_stabilityFixes", "1", CVAR_ARCHIVE },
 	{ &cg_ignore, "cg_ignore", "0", 0 },	// used for debugging
 	{ &cg_autoswitch, "cg_autoswitch", "1", CVAR_ARCHIVE },
 	{ &cg_drawGun, "cg_drawGun", "1", CVAR_ARCHIVE },

@@ -1477,6 +1477,7 @@ extern	vmCvar_t		cg_tracerWidth;
 extern	vmCvar_t		cg_tracerLength;
 extern	vmCvar_t		cg_autoswitch;
 extern	vmCvar_t		cg_ignore;
+extern	vmCvar_t		tvt_stabilityFixes;
 extern	vmCvar_t		cg_simpleItems;
 extern	vmCvar_t		cg_fov;
 extern	vmCvar_t		cg_zoomFov;
