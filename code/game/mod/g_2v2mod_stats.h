@@ -14,6 +14,7 @@ typedef enum {
     STAT_NET_DMG,
     STAT_TEAM_DMG,
     STAT_SCORE,
+    STAT_KICK_KD_PCT,
     STAT_COUNT
 } tvt_statType_t;
 
@@ -27,6 +28,7 @@ typedef struct {
     tvt_statType_t     stat;
     tvt_highlightDir_t highlight;
     qboolean           teamOnly;
+    qboolean           skipTotal;
 } tvt_statsColumn_t;
 
 typedef struct {
@@ -49,6 +51,8 @@ typedef struct {
 
 void     G_TvT_Stats_TrackDamage(gentity_t *targ, gentity_t *attacker, int damage);
 void     G_TvT_Stats_TrackKill(gentity_t *self, gentity_t *attacker);
+void     G_TvT_Stats_TrackKickFaceHit(gentity_t *kicker);
+void     G_TvT_Stats_TrackKickKnockdown(gentity_t *kicker);
 qboolean G_TvT_Cmd_Stats(gentity_t *ent);
 void     G_TvT_Stats_EndGame(void);
 

@@ -35,16 +35,31 @@ void G_TvT_Stats_TrackKill(gentity_t *self, gentity_t *attacker) {
     }
 }
 
+void G_TvT_Stats_TrackKickFaceHit(gentity_t *kicker) {
+    if (!kicker || !kicker->client) {
+        return;
+    }
+    kicker->client->tvt.stats.kickFaceHits++;
+}
+
+void G_TvT_Stats_TrackKickKnockdown(gentity_t *kicker) {
+    if (!kicker || !kicker->client) {
+        return;
+    }
+    kicker->client->tvt.stats.kickKnockdowns++;
+}
+
 static const tvt_statsColumn_t g_tvt_statsCols[] = {
-    {"Kills", STAT_KILLS, HIGHLIGHT_HIGHEST, qfalse},
-    {"Deaths", STAT_DEATHS, HIGHLIGHT_LOWEST, qfalse},
-    {"Suicides", STAT_SUICIDES, HIGHLIGHT_LOWEST, qfalse},
-    {"Team Kills", STAT_TEAMKILLS, HIGHLIGHT_LOWEST, qtrue},
-    {"Dmg Given", STAT_DMG_GIVEN, HIGHLIGHT_HIGHEST, qfalse},
-    {"Dmg Received", STAT_DMG_RECV, HIGHLIGHT_LOWEST, qfalse},
-    {"NET Dmg", STAT_NET_DMG, HIGHLIGHT_HIGHEST, qfalse},
-    {"Team Dmg", STAT_TEAM_DMG, HIGHLIGHT_LOWEST, qtrue},
-    {"Score", STAT_SCORE, HIGHLIGHT_HIGHEST, qfalse},
+    {"Kills", STAT_KILLS, HIGHLIGHT_HIGHEST, qfalse, qfalse},
+    {"Deaths", STAT_DEATHS, HIGHLIGHT_LOWEST, qfalse, qfalse},
+    {"Suicides", STAT_SUICIDES, HIGHLIGHT_LOWEST, qfalse, qfalse},
+    {"Team Kills", STAT_TEAMKILLS, HIGHLIGHT_LOWEST, qtrue, qfalse},
+    {"Dmg Given", STAT_DMG_GIVEN, HIGHLIGHT_HIGHEST, qfalse, qfalse},
+    {"Dmg Received", STAT_DMG_RECV, HIGHLIGHT_LOWEST, qfalse, qfalse},
+    {"NET Dmg", STAT_NET_DMG, HIGHLIGHT_HIGHEST, qfalse, qfalse},
+    {"Team Dmg", STAT_TEAM_DMG, HIGHLIGHT_LOWEST, qtrue, qfalse},
+    {"Score", STAT_SCORE, HIGHLIGHT_HIGHEST, qfalse, qfalse},
+    {"Kick KD%", STAT_KICK_KD_PCT, HIGHLIGHT_HIGHEST, qfalse, qtrue},
 };
 
 #define STATS_NUM_COLS (sizeof(g_tvt_statsCols) / sizeof(g_tvt_statsCols[0]))
@@ -67,6 +82,8 @@ static void G_TvT_Stats_Transform(int *stats, gclient_t *cl) {
     stats[STAT_NET_DMG] = s->dmgGiven - s->dmgReceived;
     stats[STAT_TEAM_DMG] = s->teamDmg;
     stats[STAT_SCORE] = cl->ps.persistant[PERS_SCORE];
+    stats[STAT_KICK_KD_PCT] =
+        s->kickFaceHits > 0 ? (s->kickKnockdowns * 100) / s->kickFaceHits : -1;
 }
 
 static int G_TvT_Stats_GatherPlayers(tvt_EndGamePlayer_t *out, team_t team) {
@@ -122,6 +139,9 @@ static void G_TvT_Stats_Highlight(tvt_statsGroup_t *groups, int numGroups, int c
         for (j = 0; j < numGroups; j++) {
             for (k = 0; k < groups[j].count; k++) {
                 int val = groups[j].players[k].vals[stat];
+                if (stat == STAT_KICK_KD_PCT && val < 0) {
+                    continue;
+                }
                 if (first) {
                     col->bestVal = val;
                     first = qfalse;
@@ -136,6 +156,9 @@ static void G_TvT_Stats_Highlight(tvt_statsGroup_t *groups, int numGroups, int c
                     }
                 }
             }
+        }
+        if (stat == STAT_KICK_KD_PCT && first) {
+            col->allSame = qtrue;
         }
         numActive++;
     }
@@ -152,7 +175,11 @@ static void G_TvT_Stats_Highlight(tvt_statsGroup_t *groups, int numGroups, int c
 
         for (j = 0; j < numGroups; j++) {
             for (k = 0; k < groups[j].count; k++) {
-                if (groups[j].players[k].vals[stat] == cols[i].bestVal) {
+                int val = groups[j].players[k].vals[stat];
+                if (stat == STAT_KICK_KD_PCT && val < 0) {
+                    continue;
+                }
+                if (val == cols[i].bestVal) {
                     TvT_Table_SetCellColor(&groups[j].table->rows[k], i + colOffset, S_COLOR_GREEN);
                 }
             }
@@ -209,8 +236,20 @@ static table_t *G_TvT_Stats_BuildTable(const char *teamName, const char *teamCol
             if (!G_TvT_Stats_ColActive(j)) {
                 continue;
             }
-            TvT_Table_SetCell(t, row, displayCol++, va("%d", players[i].vals[stat]));
-            totals[stat] += players[i].vals[stat];
+            if (stat == STAT_KICK_KD_PCT) {
+                if (players[i].vals[STAT_KICK_KD_PCT] >= 0) {
+                    TvT_Table_SetCell(t, row, displayCol++, va("%d%%", players[i].vals[stat]));
+                }
+                else {
+                    TvT_Table_SetCell(t, row, displayCol++, "-");
+                }
+            }
+            else {
+                TvT_Table_SetCell(t, row, displayCol++, va("%d", players[i].vals[stat]));
+            }
+            if (stat != STAT_KICK_KD_PCT) {
+                totals[stat] += players[i].vals[stat];
+            }
         }
     }
 
@@ -225,7 +264,12 @@ static table_t *G_TvT_Stats_BuildTable(const char *teamName, const char *teamCol
             if (!G_TvT_Stats_ColActive(j)) {
                 continue;
             }
-            TvT_Table_SetCell(t, row, displayCol++, va("%d", totals[g_tvt_statsCols[j].stat]));
+            if (g_tvt_statsCols[j].skipTotal) {
+                TvT_Table_SetCell(t, row, displayCol++, "-");
+            }
+            else {
+                TvT_Table_SetCell(t, row, displayCol++, va("%d", totals[g_tvt_statsCols[j].stat]));
+            }
         }
     }
 
@@ -413,6 +457,9 @@ static JSON_t *G_TvT_Stats_PlayerToJSON(tvt_EndGamePlayer_t *player) {
     TvT_JSON_AddItemToObject(p, "suicides", TvT_JSON_CreateNumber(player->vals[STAT_SUICIDES]));
     TvT_JSON_AddItemToObject(p, "dmgGiven", TvT_JSON_CreateNumber(player->vals[STAT_DMG_GIVEN]));
     TvT_JSON_AddItemToObject(p, "dmgReceived", TvT_JSON_CreateNumber(player->vals[STAT_DMG_RECV]));
+    TvT_JSON_AddItemToObject(p, "kickFaceHits", TvT_JSON_CreateNumber(cl->tvt.stats.kickFaceHits));
+    TvT_JSON_AddItemToObject(p, "kickKnockdowns", TvT_JSON_CreateNumber(cl->tvt.stats.kickKnockdowns));
+    TvT_JSON_AddItemToObject(p, "kickKnockdownPct", TvT_JSON_CreateNumber(player->vals[STAT_KICK_KD_PCT]));
 
     if (g_gametype.integer >= GT_TEAM) {
         TvT_JSON_AddItemToObject(p, "teamKills", TvT_JSON_CreateNumber(player->vals[STAT_TEAMKILLS]));

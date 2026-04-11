@@ -1649,6 +1649,7 @@ void ClientThink_real( gentity_t *ent ) {
 				VectorScale( oppDir, -1, oppDir );
 
 				G_Damage( faceKicked, ent, ent, oppDir, client->ps.origin, strength, DAMAGE_NO_ARMOR, MOD_MELEE );
+				G_TvT_Stats_TrackKickFaceHit(ent);
 
 				if ( (faceKicked->client->ps.weapon != WP_SABER ||
 					 faceKicked->client->ps.fd.saberAnimLevel < FORCE_LEVEL_3 ||
@@ -1664,6 +1665,7 @@ void ClientThink_real( gentity_t *ent ) {
 							faceKicked->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
 							faceKicked->client->ps.forceHandExtendTime = level.time + 1100;
 							faceKicked->client->ps.forceDodgeAnim = 0; //this toggles between 1 and 0, when it's 1 we should play the get up anim
+							G_TvT_Stats_TrackKickKnockdown(ent);
 						}
 
 						faceKicked->client->ps.otherKiller = ent->s.number;
