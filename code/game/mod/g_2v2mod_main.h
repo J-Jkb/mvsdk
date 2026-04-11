@@ -21,6 +21,8 @@ typedef struct {
     int dmgGiven;
     int dmgReceived;
     int teamDmg;
+    int kickFaceHits;
+    int kickKnockdowns;
 } tvt_ClientStats_t;
 
 // Client mod struct
