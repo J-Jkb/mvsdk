@@ -668,13 +668,21 @@ void trap_G2API_GiveMeVectorFromMatrix(mdxaBone_t *boltMatrix, int flags, vec3_t
 qboolean trap_G2API_GetBoltMatrix(void *ghoul2, const int modelIndex, const int boltIndex, mdxaBone_t *matrix,
 								const vec3_t angles, const vec3_t position, const int frameNum, qhandle_t *modelList, vec3_t scale)
 {
-	return (qboolean)(syscall(CG_G2_GETBOLT, ghoul2, modelIndex, boltIndex, matrix, angles, position, frameNum, modelList, scale));
+	int t = frameNum;
+	if (tvt_stabilityFixes.integer) {
+		t -= cgs.levelStartTime;
+	}
+	return (qboolean)(syscall(CG_G2_GETBOLT, ghoul2, modelIndex, boltIndex, matrix, angles, position, t, modelList, scale));
 }
 
 qboolean trap_G2API_GetBoltMatrix_NoReconstruct(void *ghoul2, const int modelIndex, const int boltIndex, mdxaBone_t *matrix,
 								const vec3_t angles, const vec3_t position, const int frameNum, qhandle_t *modelList, vec3_t scale)
 { //Same as above but force it to not reconstruct the skeleton before getting the bolt position
-	return (qboolean)(syscall(CG_G2_GETBOLT_NOREC, ghoul2, modelIndex, boltIndex, matrix, angles, position, frameNum, modelList, scale));
+	int t = frameNum;
+	if (tvt_stabilityFixes.integer) {
+		t -= cgs.levelStartTime;
+	}
+	return (qboolean)(syscall(CG_G2_GETBOLT_NOREC, ghoul2, modelIndex, boltIndex, matrix, angles, position, t, modelList, scale));
 }
 
 
@@ -682,7 +690,11 @@ qboolean trap_G2API_GetBoltMatrix_NoReconstruct(void *ghoul2, const int modelInd
 qboolean trap_G2API_GetBoltMatrix_NoRecNoRot_1_04(void *ghoul2, const int modelIndex, const int boltIndex, mdxaBone_t *matrix,
 								const vec3_t angles, const vec3_t position, const int frameNum, qhandle_t *modelList, vec3_t scale)
 { //Same as above but force it to not reconstruct the skeleton before getting the bolt position
-	return (qboolean)(syscall(CG_G2_GETBOLT_NOREC_NOROT, ghoul2, modelIndex, boltIndex, matrix, angles, position, frameNum, modelList, scale));
+	int t = frameNum;
+	if (tvt_stabilityFixes.integer) {
+		t -= cgs.levelStartTime;
+	}
+	return (qboolean)(syscall(CG_G2_GETBOLT_NOREC_NOROT, ghoul2, modelIndex, boltIndex, matrix, angles, position, t, modelList, scale));
 }
 
 int trap_G2API_InitGhoul2Model_1_04(void **ghoul2Ptr, const char *fileName, int modelIndex, qhandle_t customSkin,
@@ -724,7 +736,11 @@ qboolean trap_G2API_SetBoneAngles_1_04(void *ghoul2, int modelIndex, const char 
 qboolean trap_G2API_SetBoneAnim_1_04(void *ghoul2, const int modelIndex, const char *boneName, const int startFrame, const int endFrame,
 							  const int flags, const float animSpeed, const int currentTime, const float setFrame , const int blendTime )
 {
-	return syscall(CG_G2_PLAYANIM, ghoul2, modelIndex, boneName, startFrame, endFrame, flags, PASSFLOAT(animSpeed), currentTime, PASSFLOAT(setFrame), blendTime);
+	int t = currentTime;
+	if (tvt_stabilityFixes.integer) {
+		t -= cgs.levelStartTime;
+	}
+	return syscall(CG_G2_PLAYANIM, ghoul2, modelIndex, boneName, startFrame, endFrame, flags, PASSFLOAT(animSpeed), t, PASSFLOAT(setFrame), blendTime);
 }
 
 void trap_G2API_GetGLAName_1_04(void *ghoul2, int modelIndex, char *fillBuf)
@@ -810,7 +826,11 @@ qboolean trap_G2API_SetBoneAngles_1_02(void *ghoul2, int modelIndex, const char 
 qboolean trap_G2API_SetBoneAnim_1_02(void *ghoul2, const int modelIndex, const char *boneName, const int startFrame, const int endFrame,
 							  const int flags, const float animSpeed, const int currentTime, const float setFrame , const int blendTime )
 {
-	return syscall(CG_G2_PLAYANIM_1_02, ghoul2, modelIndex, boneName, startFrame, endFrame, flags, PASSFLOAT(animSpeed), currentTime, PASSFLOAT(setFrame), blendTime);
+	int t = currentTime;
+	if (tvt_stabilityFixes.integer) {
+		t -= cgs.levelStartTime;
+	}
+	return syscall(CG_G2_PLAYANIM_1_02, ghoul2, modelIndex, boneName, startFrame, endFrame, flags, PASSFLOAT(animSpeed), t, PASSFLOAT(setFrame), blendTime);
 }
 
 void trap_G2API_GetGLAName_1_02(void *ghoul2, int modelIndex, char *fillBuf)
