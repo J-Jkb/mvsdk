@@ -1883,6 +1883,7 @@ extern	vmCvar_t		cg_customHUDString[CUSTOM_HUD_STRINGS_COUNT];
 
 extern	vmCvar_t		tt_clientFlags;
 
+extern	vmCvar_t		cg_offlineJournalIndicator;
 extern	vmCvar_t		cg_raceTimer;
 extern	vmCvar_t		cg_raceTimerSize;
 extern	vmCvar_t		cg_raceTimerNoSpeeds;

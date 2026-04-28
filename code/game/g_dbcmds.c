@@ -2682,6 +2682,7 @@ static void G_CreateRunsTable() {
 			discardMaxDepth INT NOT NULL, \
 			lostMsecCount INT NOT NULL, \
 			lostCmdsCount INT NOT NULL, \
+			offlineJournalGapMsec INT NOT NULL DEFAULT 0, \
 			topspeed DOUBLE NOT NULL, \
 			rollSpeed DOUBLE NOT NULL, \
 			rollTakeoffClientSpeed INT NOT NULL, \
@@ -2734,6 +2735,7 @@ static void G_CreateRunsTable() {
 			RUNFLAGS(RUNFLAGSFUNC4)
 			RUNFLAGS(RUNFLAGSFUNC5)
 			RUNFLAGS(RUNFLAGSFUNC6)
+			"ALTER TABLE runs ADD COLUMN IF NOT EXISTS offlineJournalGapMsec INT NOT NULL DEFAULT 0;"
 			"";
 #undef RUNFLAGSFUNC
 #undef RUNFLAGSFUNC2
@@ -2835,10 +2837,10 @@ qboolean G_InsertRun(finishedRunInfo_t* runInfo) {
 		va("SET @now=NOW();"
 			"INSERT INTO runs (userid,course,subcourse,duration_ms,duration_ms_segmented_total,topspeed,startTriggerSpeed,rollSpeed,rollTakeoffClientSpeed,average,distance,style,msec,jump,variant,runFlags,"
 			RUNFLAGS(RUNFLAGSFUNC)
-			"runwhen,runfirst,warningFlags,fpsString, distanceXY,startLessTime,endLessTime,saveposCount,resposCount,discardCount,discardResposCount,discardMaxDepth,lostMsecCount,lostCmdsCount,server,semiBreakingChangeVersion,checksumBsp,checksumPak) "
+			"runwhen,runfirst,warningFlags,fpsString, distanceXY,startLessTime,endLessTime,saveposCount,resposCount,discardCount,discardResposCount,discardMaxDepth,lostMsecCount,lostCmdsCount,server,semiBreakingChangeVersion,checksumBsp,checksumPak,offlineJournalGapMsec) "
 			"VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"
 			RUNFLAGS(RUNFLAGSFUNC2)
-			"@now,@now,?,?,?,?,?,?,?,?,?,?,?,?," GETCONNECTIONIP "," QUOTE(SEMIBREAKINGCHANGEVERSIONDEFRAG) ",?,?) "
+			"@now,@now,?,?,?,?,?,?,?,?,?,?,?,?," GETCONNECTIONIP "," QUOTE(SEMIBREAKINGCHANGEVERSIONDEFRAG) ",?,?,?) "
 			"ON DUPLICATE KEY UPDATE "
 			"duration_ms_segmented_total = IF(?<duration_ms,?,duration_ms_segmented_total),"
 			"topspeed = IF(?<duration_ms,?,topspeed),"
@@ -2862,6 +2864,7 @@ qboolean G_InsertRun(finishedRunInfo_t* runInfo) {
 			"lostCmdsCount = IF(?<duration_ms,?,lostCmdsCount),"
 			"checksumBsp = IF(?<duration_ms,?,checksumBsp),"
 			"checksumPak = IF(?<duration_ms,?,checksumPak),"
+			"offlineJournalGapMsec = IF(?<duration_ms,?,offlineJournalGapMsec),"
 			"server = IF(?<duration_ms," GETCONNECTIONIP ",server),"
 			"semiBreakingChangeVersion = IF(?<duration_ms," QUOTE(SEMIBREAKINGCHANGEVERSIONDEFRAG) ",semiBreakingChangeVersion),"
 			"duration_ms = IF(?<duration_ms,?,duration_ms);" // duration_ms has to be set last or else all other columns arent updated
@@ -2919,6 +2922,7 @@ qboolean G_InsertRun(finishedRunInfo_t* runInfo) {
 	G_COOL_API_DB_PreparedBindInt(runInfo->lostPacketCount);
 	G_COOL_API_DB_PreparedBindInt(runInfo->checksumBsp);
 	G_COOL_API_DB_PreparedBindInt(runInfo->checksumPak);
+	G_COOL_API_DB_PreparedBindInt(runInfo->offlineJournalGapMsec);
 
 	// UPDATE PART
 	G_COOL_API_DB_PreparedBindInt(runInfo->milliseconds);
@@ -2983,6 +2987,9 @@ qboolean G_InsertRun(finishedRunInfo_t* runInfo) {
 
 	G_COOL_API_DB_PreparedBindInt(runInfo->milliseconds);
 	G_COOL_API_DB_PreparedBindInt(runInfo->checksumPak);
+
+	G_COOL_API_DB_PreparedBindInt(runInfo->milliseconds);
+	G_COOL_API_DB_PreparedBindInt(runInfo->offlineJournalGapMsec);
 
 	G_COOL_API_DB_PreparedBindInt(runInfo->milliseconds); // server (value is hardcoded)
 	G_COOL_API_DB_PreparedBindInt(runInfo->milliseconds); // semiBreakingChangeVersion (value is hardcoded)

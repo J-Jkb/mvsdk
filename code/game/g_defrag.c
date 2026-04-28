@@ -1312,7 +1312,9 @@ void DF_StartTimer_Leave(gentity_t* ent, gentity_t* activator, trace_t* trace)
 		cl->pers.stats.roll = rollStateSave;
 	}
 
-	memset(&cl->pers.raceDropped,0,sizeof(cl->pers.raceDropped)); // reset info aabout packets dropped due to wrong fps timing
+	memset(&cl->pers.raceDropped,0,sizeof(cl->pers.raceDropped)); // reset info about packets dropped due to wrong fps timing
+	cl->pers.offlineJournalGapMsec  = 0; // reset offline journal state at run start; a journal received mid-run will re-set this
+	cl->pers.offlineJournalCmdCount = 0;
 
 
 
@@ -2724,6 +2726,8 @@ static void DF_FillClientRunInfo(finishedRunInfo_t* runInfo, gentity_t* ent, int
 	runInfo->levelTimeStart = client->pers.stats.startLevelTime;
 	runInfo->lostMsecCount = client->pers.raceDropped.msecTime;
 	runInfo->lostPacketCount = client->pers.raceDropped.packetCount;
+	runInfo->offlineJournalGapMsec  = client->pers.offlineJournalGapMsec;
+	runInfo->offlineJournalCmdCount = client->pers.offlineJournalCmdCount;
 	runInfo->distance = client->pers.stats.distanceTraveled;
 	runInfo->distanceXY = client->pers.stats.distanceTraveled2D;
 	runInfo->average = runInfo->distanceXY / ((float)(milliseconds- runInfo->lostMsecCount)*0.001f);
@@ -2775,7 +2779,8 @@ const char* DF_RacePrintAppendage(finishedRunInfo_t* runInfo) {
 		"%d " // lostMsecCount
 		"%d " // lostPacketCount
 		"\"%d-%d-%d\" " // discardCount, discardResposCount, discardMaxDepth // placeHolder1
-		"%d " // placeHolder2
+		"%d " // offlineJournalGapMsec
+		"%d " // offlineJournalCmdCount
 		"%d " // placeHolder3
 		"%d " // placeHolder4
 		"%d " // millisecondsSegmentedTotal
@@ -2817,7 +2822,8 @@ const char* DF_RacePrintAppendage(finishedRunInfo_t* runInfo) {
 		,runInfo->lostPacketCount
 		,runInfo->discardCount, runInfo->discardRespos, runInfo->discardMaxDepth
 		//,runInfo->placeHolder1
-		,runInfo->placeHolder2
+		,runInfo->offlineJournalGapMsec
+		,runInfo->offlineJournalCmdCount
 		,runInfo->placeHolder3
 		,runInfo->placeHolder4
 		,runInfo->millisecondsSegmentedTotal
@@ -2968,6 +2974,11 @@ void DF_FinishTimer_Touch(gentity_t* ent, gentity_t* activator, trace_t* trace)
 
 	memset(&runInfo, 0, sizeof(runInfo));
 	DF_FillClientRunInfo(&runInfo, activator, timeLast, ent); // fills various stats we collected from start trigger and across run, and some metadata
+	// A run that survived a server timeout via offline journaling goes into its own LB
+	// regardless of movement style, so it never pollutes the main/custom leaderboards.
+	if (runInfo.offlineJournalGapMsec > 0) {
+		runInfo.lbType = LB_NETWORK_INTERFERENCE;
+	}
 	runInfo.runId = DF_GetNewRunId(); // what was the point of this again? oh yeah to associate results.
 	runInfo.endLessTime = lessTime;
 	runInfo.levelTimeEnd = level.time;
@@ -4234,6 +4245,8 @@ static void ResetSpecificPlayerTimers(gentity_t* ent, qboolean print) {
 	
 	// not like we really need to do this since it happens in start anyway
 	memset(&ent->client->pers.raceDropped, 0, sizeof(ent->client->pers.raceDropped));
+	ent->client->pers.offlineJournalGapMsec  = 0;
+	ent->client->pers.offlineJournalCmdCount = 0;
 	memset(&ent->client->pers.stats, 0, sizeof(ent->client->pers.stats));
 
 	if (wasReset && print)
@@ -6818,6 +6831,229 @@ void SP_HoldableMedkit(gentity_t* ent) {
 	gitem_t* item = BG_FindItemForHoldable(HI_MEDPAC);
 	G_SpawnItem(ent, item);
 	ent->bactaExtra = 25;
+}
+
+/*
+====================
+DF_ReplayOfflineJournal
+
+Server-side Pmove replay for runs that finished during an offline-journaling
+gap.  Called by GAME_OFFLINE_JOURNAL_REPLAY after the engine has assembled
+the full binary payload and written it to a temp file.
+
+File format (written by CL_SerializeOfflineJournal on the client):
+  [int32 OJ_MAGIC][int32 gapMsec][int32 totalCmds][int32 psSize]
+  [playerState_t raw][usercmd_t × totalCmds, sorted by serverTime]
+
+The player entity is expected to be alive and properly connected at this
+point.  The function temporarily replaces ps and pers.raceStartCommandTime
+with values from the journal snapshot, runs the Pmove loop, then calls
+G_TouchTriggers after each step so that the finish trigger fires naturally
+via DF_FinishTimer_Touch.  On completion the original ps is restored.
+====================
+*/
+void DF_ReplayOfflineJournal( int clientNum ) {
+	gentity_t		*ent;
+	gclient_t		*client;
+	fileHandle_t	fh;
+	char			tempPath[64];
+	int				fileLen;
+	byte			*buf;
+	byte			*p;
+	int				magic, gapMsec, totalCmds, psSize;
+	playerState_t	journalPs;
+	playerState_t	savedPs;
+	int				savedRaceStartCommandTime;
+	int				savedOfflineGapMsec;
+	int				i;
+	pmove_t			pm;
+	usercmd_t		*cmds;
+	usercmd_t		cmd;
+	qboolean		finishFired;
+
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS ) {
+		return;
+	}
+
+	ent    = g_entities + clientNum;
+	client = ent->client;
+
+	if ( !ent->inuse || !client || client->pers.connected != CON_CONNECTED ) {
+		Com_Printf( "^3[OfflineJournalReplay] client %d not connected – skipping.\n", clientNum );
+		return;
+	}
+
+	// -- Read the temp file -----------------------------------------------
+	Com_sprintf( tempPath, sizeof(tempPath), OJ_TEMPFILE_FMT, clientNum );
+	fileLen = trap_FS_FOpenFile( tempPath, &fh, FS_READ );
+	if ( fileLen <= 0 || !fh ) {
+		Com_Printf( "^3[OfflineJournalReplay] could not open %s (len=%d)\n", tempPath, fileLen );
+		return;
+	}
+
+	buf = (byte *)malloc( fileLen );
+	if ( !buf ) {
+		trap_FS_FCloseFile( fh );
+		return;
+	}
+	trap_FS_Read( buf, fileLen, fh );
+	trap_FS_FCloseFile( fh );
+	// Truncate the temp file so stale data isn't replayed again on the next reconnect.
+	{
+		fileHandle_t wfh = 0;
+		trap_FS_FOpenFile( tempPath, &wfh, FS_WRITE );
+		if ( wfh ) trap_FS_FCloseFile( wfh );
+	}
+
+	// -- Validate header --------------------------------------------------
+	if ( fileLen < (int)( 4 * 4 + sizeof(playerState_t) ) ) {
+		Com_Printf( "^3[OfflineJournalReplay] file too short (%d bytes)\n", fileLen );
+		trap_HeapFree( buf );
+		return;
+	}
+
+	p      = buf;
+	magic  = *(int *)p; p += 4;
+	gapMsec   = *(int *)p; p += 4;
+	totalCmds = *(int *)p; p += 4;
+	psSize    = *(int *)p; p += 4;
+
+	if ( magic != OJ_MAGIC || psSize != (int)sizeof(playerState_t) ) {
+		Com_Printf( "^3[OfflineJournalReplay] bad header (magic=0x%08X psSize=%d expected=%d)\n",
+					magic, psSize, (int)sizeof(playerState_t) );
+		free( buf );
+		return;
+	}
+
+	if ( totalCmds < 0 || totalCmds > 200000 ) {
+		Com_Printf( "^3[OfflineJournalReplay] absurd cmd count %d – aborting.\n", totalCmds );
+		free( buf );
+		return;
+	}
+
+	{
+	int expectedSize = 4*4 + (int)sizeof(playerState_t) + totalCmds * (int)sizeof(usercmd_t);
+	if ( fileLen < expectedSize ) {
+		Com_Printf( "^3[OfflineJournalReplay] file too short for %d cmds (have %d, need %d)\n",
+					totalCmds, fileLen, expectedSize );
+		free( buf );
+		return;
+	}
+	}
+
+	memcpy( &journalPs, p, sizeof(playerState_t) );
+	p += sizeof(playerState_t);
+
+	cmds = (usercmd_t *)p;
+
+	Com_Printf( "^3[OfflineJournalReplay] Replaying %d cmds for %s (gap=%dms).\n",
+				totalCmds, client->pers.netname, gapMsec );
+
+	// -- Set up replay state -----------------------------------------------
+	savedPs                    = client->ps;
+	savedRaceStartCommandTime  = client->pers.raceStartCommandTime;
+	savedOfflineGapMsec        = client->pers.offlineJournalGapMsec;
+
+	// Restore pre-gap physics state from the client's last server snapshot.
+	client->ps = journalPs;
+
+	// Recover run start time: the client's playerState encodes
+	// raceStartCommandTime in ps.duelTime (set at the same time, line 1296 g_defrag.c).
+	if ( journalPs.duelTime && !client->pers.raceStartCommandTime ) {
+		client->pers.raceStartCommandTime = journalPs.duelTime;
+	}
+
+	// Ensure the run will be categorised as Network Interference on finish.
+	if ( !client->pers.offlineJournalGapMsec ) {
+		client->pers.offlineJournalGapMsec = gapMsec;
+	}
+
+	// Update entity position to match restored ps.
+	VectorCopy( client->ps.origin, ent->s.origin );
+	VectorCopy( client->ps.origin, ent->r.currentOrigin );
+	trap_LinkEntity( ent );
+
+	// -- Pmove replay loop -------------------------------------------------
+	memset( &pm, 0, sizeof(pm) );
+	pm.ps           = &client->ps;
+	pm.tracemask    = MASK_PLAYERSOLID;
+	pm.trace        = JP_Trace;
+	pm.rawtrace     = trap_Trace;
+	pm.pointcontents = trap_PointContents;
+	pm.animations   = bgGlobalAnimations;
+	pm.baseEnt      = (bgEntity_t *)g_entities;
+	pm.entSize      = sizeof(gentity_t);
+	pm.mod          = SVMOD_TOMMYTERNAL;
+	pm.pmove_fixed  = g_pmove_fixed.integer;
+	pm.pmove_msec   = g_pmove_msec.integer;
+	pm.highFpsFix   = g_fixHighFPSAbuse.integer;
+	pm.unlockRandom = g_unlockRandom.integer;
+	pm.gametype     = g_gametype.integer;
+
+	finishFired = qfalse;
+
+	for ( i = 0; i < totalCmds; i++ ) {
+		if ( finishFired ) break; // no need to continue after finish
+
+		cmd = cmds[i];
+
+		// Skip cmds already processed before the gap.
+		if ( cmd.serverTime <= client->ps.commandTime ) {
+			continue;
+		}
+
+		pm.cmd = cmd;
+
+		// Track pre-move position for robust trigger evaluation.
+		VectorCopy( client->ps.origin, client->prePmovePosition );
+		VectorCopy( ent->r.mins,       client->prePmoveMins );
+		VectorCopy( ent->r.maxs,       client->prePmoveMaxs );
+		client->prePmoveEFlags     = client->ps.eFlags;
+		client->prePmovePositionSet = qtrue;
+		client->prePmoveCommandTime = client->ps.commandTime;
+
+		Pmove( &pm );
+
+		// Update entity origin so G_TouchTriggers has correct spatial data.
+		VectorCopy( client->ps.origin, ent->s.origin );
+		VectorCopy( client->ps.origin, ent->r.currentOrigin );
+		VectorCopy( pm.mins, ent->r.mins );
+		VectorCopy( pm.maxs, ent->r.maxs );
+		VectorCopy( client->ps.origin, client->postPmovePosition );
+		VectorCopy( pm.mins, client->postPmoveMins );
+		VectorCopy( pm.maxs, client->postPmoveMaxs );
+		trap_LinkEntity( ent );
+
+		// Check for finish trigger (and any other triggers: checkpoints,
+		// teleporters, etc.).  DF_FinishTimer_Touch fires here if the player
+		// crosses the finish trigger, which records the run as LB_NETWORK_INTERFERENCE.
+		G_TouchTriggers( ent );
+
+		// Detect if the run was just recorded (raceStartCommandTime cleared on finish).
+		if ( savedRaceStartCommandTime && !client->pers.raceStartCommandTime ) {
+			finishFired = qtrue;
+			Com_Printf( "^3[OfflineJournalReplay] Finish trigger fired at cmd %d/%d.\n",
+						i + 1, totalCmds );
+		}
+	}
+
+	if ( !finishFired ) {
+		Com_Printf( "^3[OfflineJournalReplay] No finish trigger found in %d cmds.\n", totalCmds );
+		// Restore original ps so the reconnected player doesn't end up at their
+		// pre-gap position instead of where they are now.
+		client->ps = savedPs;
+	}
+
+	// Restore run metadata regardless.
+	client->pers.raceStartCommandTime = savedRaceStartCommandTime;
+	client->pers.offlineJournalGapMsec = savedOfflineGapMsec;
+
+	// Re-link entity at the post-reconnect position.
+	VectorCopy( savedPs.origin, ent->s.origin );
+	VectorCopy( savedPs.origin, ent->r.currentOrigin );
+	trap_LinkEntity( ent );
+
+	free( buf );
 }
 
 

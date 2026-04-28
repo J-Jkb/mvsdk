@@ -599,6 +599,7 @@ vmCvar_t	tt_clientFlags;
 vmCvar_t	cg_customHUDStringExample;
 vmCvar_t	cg_customHUDString[CUSTOM_HUD_STRINGS_COUNT];
 
+vmCvar_t	cg_offlineJournalIndicator;
 vmCvar_t	cg_raceTimer;
 vmCvar_t	cg_raceTimerSize;
 vmCvar_t	cg_raceTimerNoSpeeds;
@@ -1053,6 +1054,7 @@ static cvarTable_t cvarTable[] = { // bk001129
 	{ &cg_customHUDString[7], "cg_customHUDString7", "", CVAR_TEMP },
 	{ &cg_customHUDString[8], "cg_customHUDString8", "", CVAR_TEMP },
 	{ &cg_customHUDString[9], "cg_customHUDString9", "", CVAR_TEMP },
+	{ &cg_offlineJournalIndicator, "cg_offlineJournalIndicator", "1", CVAR_ARCHIVE },
 	{ &cg_raceTimer, "cg_raceTimer", "3", CVAR_ARCHIVE },
 	{ &cg_raceTimerSize, "cg_raceTimerSize", "0.75", CVAR_ARCHIVE },
 	{ &cg_raceTimerNoSpeeds, "cg_raceTimerNoSpeeds", "0", CVAR_ARCHIVE },

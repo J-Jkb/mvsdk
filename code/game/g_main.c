@@ -738,6 +738,9 @@ intptr_t JK2_vmMain( intptr_t command, intptr_t arg0, intptr_t arg1, intptr_t ar
 			gentity_t* ent = g_entities + arg0;
 			return DF_KeepClientZombie(ent);
 		}
+	case GAME_OFFLINE_JOURNAL_REPLAY:
+		DF_ReplayOfflineJournal( arg0 );
+		return 0;
 	case GAME_CLIENT_DISCONNECT:
 		ClientDisconnect( arg0 );
 		return 0;

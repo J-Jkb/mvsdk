@@ -79,10 +79,11 @@ typedef struct bitInfoMVStyle_s {
 
 typedef enum mainLeaderboardType_s {
 	LB_MAIN,
-	LB_NOJUMPBUG, // main fps but nojumpbug
-	LB_CUSTOM, // other fps, segmented, etc
-	LB_SEGMENTED, // main fps with or without jumpbug, segmented
-	LB_CHEAT, // strafebot, tas
+	LB_NOJUMPBUG,			// main fps but nojumpbug
+	LB_CUSTOM,				// other fps, segmented, etc
+	LB_SEGMENTED,			// main fps with or without jumpbug, segmented
+	LB_CHEAT,				// strafebot, tas
+	LB_NETWORK_INTERFERENCE,// run survived a server timeout via offline journaling
 	LB_TYPES_COUNT
 } mainLeaderboardType_t;
 
@@ -319,7 +320,10 @@ typedef struct finishedRunInfo_s {
 	int			lostMsecCount;
 	int			lostPacketCount;
 	int			discardCount, discardRespos, discardMaxDepth;	//int			placeHolder1;
-	int			placeHolder2;
+	// Non-zero when the runner survived a server timeout via offline journaling.
+	// Used to place the run in the 'Network Interference' category rather than main.
+	int			offlineJournalGapMsec;
+	int			offlineJournalCmdCount;
 	int			placeHolder3;
 	int			placeHolder4;
 	int			millisecondsSegmentedTotal;

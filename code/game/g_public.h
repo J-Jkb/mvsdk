@@ -860,5 +860,6 @@ typedef enum {
 	GAME_COOL_API_PHYSICSFPSUPDATE,
 	GAME_COOL_API_KEEPZOMBIE,
 	GAME_COOL_API_CROSS_SERVER_COMMAND_RECEIVED,
+	GAME_OFFLINE_JOURNAL_REPLAY,	// ( int clientNum ) -- run Pmove replay from temp journal file
 } gameExport_t;
 

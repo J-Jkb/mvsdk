@@ -32,11 +32,12 @@ bitInfo_t runFlagsNames[] = {
 };
 
 bitInfo_t leaderboardNames[LB_TYPES_COUNT] = {
-	{ "Main" },//0
-	{ "NoJumpBug" },//1
-	{ "Custom" },//2
-	{ "Segmented" },//3
-	{ "Cheat" },//4
+	{ "Main" },				//0
+	{ "NoJumpBug" },		//1
+	{ "Custom" },			//2
+	{ "Segmented" },		//3
+	{ "Cheat" },			//4
+	{ "NetInterference" },	//5 -- run survived a server timeout via offline journaling
 };
 
 #define RUNFLAGSFUNC(a,b,c,d,e,f) {#a},
@@ -107,12 +108,17 @@ const char* getLeaderboardSQLConditions(mainLeaderboardType_t lbType, raceStyle_
 		Com_sprintf(whereString[lbType], sizeof(whereString[lbType]), "(`" QUOTEME(RUNFLAGSDBPREFIX) "%s`>0 OR `" QUOTEME(RUNFLAGSDBPREFIX) "%s`>0)", runFlagsShortNames[RFLINDEX_BOT].string, runFlagsShortNames[RFLINDEX_TAS].string);
 		return whereString[lbType];
 	}
+	if (lbType == LB_NETWORK_INTERFERENCE) {
+		// Any run style is eligible; the only qualifier is that the offline journal gap is non-zero.
+		Com_sprintf(whereString[lbType], sizeof(whereString[lbType]), "offlineJournalGapMsec > 0");
+		return whereString[lbType];
+	}
 	if (lbType == LB_SEGMENTED) { // TODO honestly this sucks, make this readable wtf
 		// WHY am i putting the "OR " and "AND " in its own quotes instead of just intoo SUBFUNC? Because QVM preprocessor thinks there shouldn't be an empty space between AND and d then. Wtf? oh well
 #define SUBFUNC(a,d)  d ## a != 
 #define RUNFLAGSFUNC(a,b,c,d,e,f) e "OR " QUOTEME(SUBFUNC(a,d)) "%d " f
 #define RUNFLAGSFUNC2(a,b,c,d,e,f) , (int)!!((int)defaultLevelRaceStyle->runFlags & RFL_ ## b)
-		Com_sprintf(whereString[lbType], sizeof(whereString[lbType]), "(`" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND  `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=1 )", runFlagsShortNames[RFLINDEX_BOT].string, runFlagsShortNames[RFLINDEX_TAS].string, runFlagsShortNames[RFLINDEX_SEGMENTED].string
+		Com_sprintf(whereString[lbType], sizeof(whereString[lbType]), "(`" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND  `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=1 AND offlineJournalGapMsec = 0)", runFlagsShortNames[RFLINDEX_BOT].string, runFlagsShortNames[RFLINDEX_TAS].string, runFlagsShortNames[RFLINDEX_SEGMENTED].string
 		);
 		return whereString[lbType];
 #undef RUNFLAGSFUNC
@@ -123,7 +129,7 @@ const char* getLeaderboardSQLConditions(mainLeaderboardType_t lbType, raceStyle_
 #define SUBFUNC(a,d)  d ## a != 
 #define RUNFLAGSFUNC(a,b,c,d,e,f) e "OR " QUOTEME(SUBFUNC(a,d)) "%d " f
 #define RUNFLAGSFUNC2(a,b,c,d,e,f) , (int)!!((int)defaultLevelRaceStyle->runFlags & RFL_ ## b)
-		Com_sprintf(whereString[lbType], sizeof(whereString[lbType]), "(`" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND ("
+		Com_sprintf(whereString[lbType], sizeof(whereString[lbType]), "(`" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND offlineJournalGapMsec = 0 AND ("
 			"(msec != 7 AND msec != 8) "
 			"OR jump != %d " 
 			RUNFLAGS(RUNFLAGSFUNC)
@@ -139,7 +145,7 @@ const char* getLeaderboardSQLConditions(mainLeaderboardType_t lbType, raceStyle_
 #define SUBFUNC(a,d)  d ## a = 
 #define RUNFLAGSFUNC(a,b,c,d,e,f) e "AND " QUOTEME(SUBFUNC(a,d)) "%d " f
 #define RUNFLAGSFUNC2(a,b,c,d,e,f) , (int)!!((int)defaultLevelRaceStyle->runFlags & RFL_ ## b)
-		Com_sprintf(whereString[lbType], sizeof(whereString[lbType]), "(`" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND ("
+		Com_sprintf(whereString[lbType], sizeof(whereString[lbType]), "(`" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND offlineJournalGapMsec = 0 AND ("
 			"(msec = 7 OR msec = 8) "
 			"AND jump = %d "
 			RUNFLAGS(RUNFLAGSFUNC)
@@ -156,7 +162,7 @@ const char* getLeaderboardSQLConditions(mainLeaderboardType_t lbType, raceStyle_
 #define SUBFUNC(a,d)  d ## a = 
 #define RUNFLAGSFUNC(a,b,c,d,e,f) e "AND " QUOTEME(SUBFUNC(a,d)) "%d " f
 #define RUNFLAGSFUNC2(a,b,c,d,e,f) , (int)!!((int)defaultLevelRaceStyle->runFlags & RFL_ ## b)
-		Com_sprintf(whereString[lbType], sizeof(whereString[lbType]), "(`" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND ("
+		Com_sprintf(whereString[lbType], sizeof(whereString[lbType]), "(`" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND `" QUOTEME(RUNFLAGSDBPREFIX) "%s`=0 AND offlineJournalGapMsec = 0 AND ("
 			"(msec = 7 OR msec = 8) "
 			"AND jump = %d "
 			RUNFLAGS(RUNFLAGSFUNC)

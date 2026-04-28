@@ -8,6 +8,13 @@
 #include "bg_defrag_global.h"
 #include "bg_debug.h"
 #include "bg_cmd.h"
+
+// Offline-journal binary protocol constants (mirror of qcommon.h definitions;
+// kept here so the game module doesn't need to include engine headers).
+#ifndef OJ_MAGIC
+#define OJ_MAGIC           0x4A4C4F4A  // "JOLJ"
+#define OJ_TEMPFILE_FMT    "oj_replay_%d.bin"
+#endif
 #include "g_defrag.h"
 #include "g_dbcmds.h"
 
@@ -734,6 +741,11 @@ typedef struct {
 	mapRating_t	mapRatings[MV_NUMSTYLES];
 
 	int			lastLevelSpawnTime; // for scheduling FP_SEE in duel queue. always the level.time, not commandtime. never use for gameplay sensitive things (that could mess up a segmented replay)
+
+	// Offline journal: non-zero when the client survived a server timeout by buffering
+	// moves locally and has since reconnected. Cleared when a new run timer starts.
+	int			offlineJournalGapMsec;		// duration of the local-only gap (ms)
+	int			offlineJournalCmdCount;		// usercmds buffered during the gap
 } clientPersistant_t;
 
 typedef struct bufferPrint_s {
@@ -1597,6 +1609,7 @@ void DF_SetPlayerSubContestValue(gentity_t* ent, subContests_t subcontest, float
 qboolean DF_SetPlayerSubContestValueSafeguarded(gentity_t* ent, subContests_t subcontest, float value, float extraParam1, float extraParam2, int extraParam3, int extraParam4);
 void DF_RequestSubContestLeaderboard(gentity_t* ent, subContests_t contest, int page);
 qboolean DF_KeepClientZombie(gentity_t* ent);
+void     DF_ReplayOfflineJournal( int clientNum );
 void DF_UpdateRanksMainRequest(gentity_t* requesterOrNull, const char* courseNameOrNull, qboolean forceAll, int limitCount);
 void G_SaveClipDemo(gentity_t* ent, const char* demoname, const char* clipPrint);
 void G_FastDBSEffects(gentity_t* ent, float speed, qboolean isReturn);

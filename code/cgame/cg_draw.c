@@ -4282,9 +4282,53 @@ void JKMod_CG_DrawClock(void)
 Custom draw functions
 =====================================================================
 */
+/*
+====================
+CG_DrawOfflineJournalIndicator
+
+Small amber overlay shown while the client is in offline-journaling mode
+(server timed out but the run is still ongoing locally).  Blinks slowly
+so it is noticeable but not distracting.  Cleared as soon as the gap
+metadata is delivered to the server on reconnect.
+====================
+*/
+static void CG_DrawOfflineJournalIndicator( void ) {
+	static int startMs = 0;
+	vec4_t     color = { 1.0f, 0.65f, 0.0f, 0.75f };
+	char       text[32];
+	int        elapsedSec;
+
+	if ( !cg_offlineJournalIndicator.integer )
+	{
+		startMs = 0;
+		return;
+	}
+
+	if ( !trap_Cvar_VariableIntegerValue( "cl_offlineJournalingActive" ) )
+	{
+		startMs = 0;
+		return;
+	}
+
+	if ( !startMs )
+		startMs = trap_Milliseconds();
+
+	// blink: visible 700 ms, hidden 300 ms per second
+	if ( ( trap_Milliseconds() % 1000 ) > 700 )
+		return;
+
+	elapsedSec = ( trap_Milliseconds() - startMs ) / 1000;
+	Com_sprintf( text, sizeof( text ), "OFFLINE ~%ds", elapsedSec );
+
+	CG_Text_Paint( 5, 5, 0.3f, color, text, 0.0f, 0,
+		ITEM_TEXTSTYLE_OUTLINED, FONT_SMALL, NULL );
+}
+
 void JKMod_CG_Draw2D(void)
 {
 	centity_t* cent = &cg_entities[cg.snap->ps.clientNum];
+
+	CG_DrawOfflineJournalIndicator();
 
 	// Draw clock
 	if (jkcvar_cg_drawClock.integer)

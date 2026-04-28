@@ -6854,6 +6854,46 @@ static void Cmd_AltFolow_f( gentity_t *ent ) {
 		trap_SendServerCommand(ent - g_entities,"print \"Alt-follow is now ^1disabled^7.\n\"");
 }
 
+/*
+==================
+Cmd_OfflineJournal_f
+
+Synthetic client command injected by the engine (SV_HandleOfflineJournal) when
+a client reconnects after surviving a server timeout via offline journaling.
+NOT a real player-initiated command -- the engine tokenises and dispatches it
+directly via VM_Call(GAME_CLIENT_COMMAND).
+
+argv(1) = gap duration in ms
+argv(2) = number of usercmds buffered during the offline period
+==================
+*/
+static void Cmd_OfflineJournal_f( gentity_t *ent ) {
+	char arg1[MAX_TOKEN_CHARS];
+	char arg2[MAX_TOKEN_CHARS];
+	int  gapMsec, cmdCount;
+
+	trap_Argv( 1, arg1, sizeof(arg1) );
+	trap_Argv( 2, arg2, sizeof(arg2) );
+	gapMsec  = atoi(arg1);
+	cmdCount = atoi(arg2);
+
+	if ( gapMsec <= 0 || cmdCount <= 0 ) {
+		return;
+	}
+
+	// Only mark runs that are currently in-progress; if no run is active the
+	// next run start will clear these fields anyway.
+	ent->client->pers.offlineJournalGapMsec  = gapMsec;
+	ent->client->pers.offlineJournalCmdCount = cmdCount;
+
+	// Inform the player so they know their run will land in 'Network Interference'.
+	if ( ent->client->pers.raceStartCommandTime ) {
+		trap_SendServerCommand( ent - g_entities,
+			va( "print \"^3[Defrag] Active run flagged as ^1Network Interference^3 "
+				"(%dms offline, %d buffered cmds).\n\"", gapMsec, cmdCount ) );
+	}
+}
+
 //Stuff from openJK
 #define CMD_NOINTERMISSION		(1<<0)
 #define CMD_INTERMISSIONUNKNOWN	(1<<1) // not explicitly blocked by intermission but not known either. will be printed as say. dumb, but keeping it to maintain behavior
@@ -6938,6 +6978,7 @@ clientCommand_t clientCommands[] = {
 	{"mostplayed",			NULL, Cmd_MapSearch_f,					CMD_NOINTERMISSION | CMD_SIGNALSPRESENCE},
 	{"move",				NULL, Cmd_MovementStyle_f,				CMD_NOINTERMISSION},
 	{"noclip",				NULL, Cmd_Noclip_f,						CMD_NOINTERMISSION | CMD_SIGNALSPRESENCE},
+	{"offlineJournal",		NULL, Cmd_OfflineJournal_f,				CMD_NOINTERMISSION}, // injected by engine, not a real player command
 	{"notarget",			NULL, Cmd_Notarget_f,					CMD_CHEAT | CMD_ALIVE | CMD_NOINTERMISSION},
 	{"notwr",				NULL, Cmd_MapSearch_f,					CMD_NOINTERMISSION | CMD_SIGNALSPRESENCE},
 	{"pickmode",			NULL, Cmd_Mode_f,						CMD_NOINTERMISSION},
